@@ -2,7 +2,7 @@ class Game2048 {
     constructor() {
         this.grid = [];
         this.score = 0;
-        this.bestScore = localStorage.getItem('best2048') || 0;
+        this.bestScore = parseInt(localStorage.getItem('best2048')) || 0;
         this.size = 4;
         this.overlay = document.getElementById('overlay');
         this.message = document.getElementById('message');
@@ -21,6 +21,8 @@ class Game2048 {
         this.bestScoreEl.textContent = this.bestScore;
         this.hideOverlay();
         this.isProcessing = false;
+        this.hasWon = false;
+        this.newTileInfo = null;
         
         const gridEl = document.getElementById('grid');
         gridEl.innerHTML = '';
@@ -35,6 +37,7 @@ class Game2048 {
         this.addRandomTile();
         this.addRandomTile();
         this.render();
+        this.hasWon = false;
     }
 
     addRandomTile() {
@@ -50,6 +53,7 @@ class Game2048 {
         if (emptyCells.length > 0) {
             const { r, c } = emptyCells[Math.floor(Math.random() * emptyCells.length)];
             this.grid[r][c] = Math.random() < 0.9 ? 2 : 4;
+            // 返回新方块信息用于渲染动画
             return { r, c, value: this.grid[r][c], isNew: true };
         }
         return null;
@@ -73,13 +77,29 @@ class Game2048 {
                     const cell = document.getElementById(`cell-${cellIndex}`);
                     if (cell) {
                         const tile = document.createElement('div');
-                        tile.className = `tile tile-${value > 2048 ? 'super' : value}`;
+                        const isNewTile = this.newTileInfo && 
+                            this.newTileInfo.r === r && 
+                            this.newTileInfo.c === c;
+                        tile.className = `tile tile-${value > 2048 ? 'super' : value}${isNewTile ? ' new' : ''}`;
                         tile.textContent = value;
                         cell.appendChild(tile);
                     }
                 }
             }
         }
+        // 清除新方块标记，只在下一帧保留动画
+        this.newTileInfo = null;
+    }
+
+    checkWin() {
+        for (let r = 0; r < this.size; r++) {
+            for (let c = 0; c < this.size; c++) {
+                if (this.grid[r][c] === 2048) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     updateScore() {
@@ -164,10 +184,18 @@ class Game2048 {
         
         if (moved) {
             this.updateScore();
-            this.addRandomTile();
+            const newTile = this.addRandomTile();
+            if (newTile) {
+                this.newTileInfo = newTile;
+            }
             this.render();
             
-            if (this.isGameOver()) {
+            if (this.checkWin() && !this.hasWon) {
+                this.hasWon = true;
+                setTimeout(() => {
+                    this.showOverlay('你赢了! 🎉');
+                }, 300);
+            } else if (this.isGameOver()) {
                 this.showOverlay('游戏结束!');
             }
         }
@@ -253,9 +281,21 @@ class Game2048 {
         gameContainer.addEventListener('touchstart', (e) => {
             startX = e.touches[0].clientX;
             startY = e.touches[0].clientY;
-        });
+        }, { passive: false });
+
+        gameContainer.addEventListener('touchmove', (e) => {
+            // Bug Fix: 阻止触摸移动时的页面滚动
+            e.preventDefault();
+        }, { passive: false });
 
         gameContainer.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            
+            // Bug Fix: 检查触摸起始位置是否已记录
+            if (startX === undefined || startY === undefined) {
+                return;
+            }
+            
             const endX = e.changedTouches[0].clientX;
             const endY = e.changedTouches[0].clientY;
             
@@ -281,7 +321,11 @@ class Game2048 {
                     }
                 }
             }
-        });
+            
+            // Bug Fix: 重置触摸位置
+            startX = undefined;
+            startY = undefined;
+        }, { passive: false });
 
         // 按钮事件
         document.getElementById('new-game').addEventListener('click', () => this.init());
