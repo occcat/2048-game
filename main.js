@@ -8,6 +8,7 @@ class Game2048 {
         this.message = document.getElementById('message');
         this.scoreEl = document.getElementById('score');
         this.bestScoreEl = document.getElementById('best-score');
+        this.isProcessing = false;
         
         this.init();
         this.bindEvents();
@@ -19,14 +20,15 @@ class Game2048 {
         this.updateScore();
         this.bestScoreEl.textContent = this.bestScore;
         this.hideOverlay();
+        this.isProcessing = false;
         
-        // Clear and recreate grid cells
         const gridEl = document.getElementById('grid');
         gridEl.innerHTML = '';
         
         for (let i = 0; i < this.size * this.size; i++) {
             const cell = document.createElement('div');
             cell.className = 'cell';
+            cell.id = `cell-${i}`;
             gridEl.appendChild(cell);
         }
         
@@ -48,26 +50,36 @@ class Game2048 {
         if (emptyCells.length > 0) {
             const { r, c } = emptyCells[Math.floor(Math.random() * emptyCells.length)];
             this.grid[r][c] = Math.random() < 0.9 ? 2 : 4;
+            return { r, c, value: this.grid[r][c], isNew: true };
         }
+        return null;
     }
 
     render() {
-        const cells = document.querySelectorAll('.cell');
-        cells.forEach((cell, i) => {
-            const r = Math.floor(i / this.size);
-            const c = i % this.size;
-            const value = this.grid[r][c];
-            
-            cell.innerHTML = '';
-            cell.className = 'cell';
-            
-            if (value > 0) {
-                const tile = document.createElement('div');
-                tile.className = `tile tile-${value > 2048 ? 'super' : value}`;
-                tile.textContent = value;
-                cell.appendChild(tile);
+        // 清除所有单元格
+        for (let i = 0; i < this.size * this.size; i++) {
+            const cell = document.getElementById(`cell-${i}`);
+            if (cell) {
+                cell.innerHTML = '';
             }
-        });
+        }
+        
+        // 渲染所有方块
+        for (let r = 0; r < this.size; r++) {
+            for (let c = 0; c < this.size; c++) {
+                const value = this.grid[r][c];
+                if (value > 0) {
+                    const cellIndex = r * this.size + c;
+                    const cell = document.getElementById(`cell-${cellIndex}`);
+                    if (cell) {
+                        const tile = document.createElement('div');
+                        tile.className = `tile tile-${value > 2048 ? 'super' : value}`;
+                        tile.textContent = value;
+                        cell.appendChild(tile);
+                    }
+                }
+            }
+        }
     }
 
     updateScore() {
@@ -88,68 +100,62 @@ class Game2048 {
         this.overlay.classList.add('show');
     }
 
+    // 修复的滑动逻辑 - 不再使用旋转+反转，而是直接处理每一行/列
     slide(direction) {
+        if (this.isProcessing) return;
+        this.isProcessing = true;
+        
         let moved = false;
+        const previousGrid = this.grid.map(row => [...row]);
         
-        const rotateGrid = (grid) => {
-            return grid[0].map((_, i) => grid.map(row => row[i]).reverse());
-        };
-        
-        const slideRow = (row) => {
-            // Step 1: Remove zeros
-            let newRow = row.filter(x => x !== 0);
-            
-            // Step 2: Merge adjacent equal numbers
-            for (let i = 0; i < newRow.length - 1; i++) {
-                if (newRow[i] === newRow[i + 1] && newRow[i] !== 0) {
-                    newRow[i] *= 2;
-                    this.score += newRow[i];
-                    newRow[i + 1] = 0;
-                    // Skip the next one since we just merged it
-                    i++;
+        // 根据方向处理
+        if (direction === 'left') {
+            for (let r = 0; r < this.size; r++) {
+                const line = this.grid[r].slice();
+                const newLine = this.processLine(line);
+                for (let c = 0; c < this.size; c++) {
+                    this.grid[r][c] = newLine[c];
                 }
             }
-            
-            // Step 3: Remove zeros again after merge
-            newRow = newRow.filter(x => x !== 0);
-            
-            // Step 4: Pad with zeros
-            while (newRow.length < this.size) {
-                newRow.push(0);
+        } else if (direction === 'right') {
+            for (let r = 0; r < this.size; r++) {
+                const line = this.grid[r].slice().reverse();
+                const newLine = this.processLine(line);
+                newLine.reverse();
+                for (let c = 0; c < this.size; c++) {
+                    this.grid[r][c] = newLine[c];
+                }
             }
-            
-            return newRow;
-        };
-        
-        let transformedGrid = this.grid;
-        
-        // Rotate grid to simplify direction handling
-        if (direction === 'right') {
-            transformedGrid = transformedGrid.map(row => row.reverse());
-        } else if (direction === 'down') {
-            transformedGrid = rotateGrid(transformedGrid);
-            transformedGrid = transformedGrid.map(row => row.reverse());
         } else if (direction === 'up') {
-            transformedGrid = rotateGrid(transformedGrid);
+            for (let c = 0; c < this.size; c++) {
+                const line = [];
+                for (let r = 0; r < this.size; r++) {
+                    line.push(this.grid[r][c]);
+                }
+                const newLine = this.processLine(line);
+                for (let r = 0; r < this.size; r++) {
+                    this.grid[r][c] = newLine[r];
+                }
+            }
+        } else if (direction === 'down') {
+            for (let c = 0; c < this.size; c++) {
+                const line = [];
+                for (let r = 0; r < this.size; r++) {
+                    line.push(this.grid[r][c]);
+                }
+                line.reverse();
+                const newLine = this.processLine(line);
+                newLine.reverse();
+                for (let r = 0; r < this.size; r++) {
+                    this.grid[r][c] = newLine[r];
+                }
+            }
         }
         
-        // Slide each row
-        transformedGrid = transformedGrid.map(row => slideRow(row));
-        
-        // Rotate back
-        if (direction === 'right') {
-            transformedGrid = transformedGrid.map(row => row.reverse());
-        } else if (direction === 'down') {
-            transformedGrid = transformedGrid.map(row => row.reverse());
-            transformedGrid = rotateGrid(transformedGrid);
-        } else if (direction === 'up') {
-            transformedGrid = rotateGrid(transformedGrid);
-        }
-        
-        // Check if anything moved
+        // 检查是否有移动
         for (let r = 0; r < this.size; r++) {
             for (let c = 0; c < this.size; c++) {
-                if (this.grid[r][c] !== transformedGrid[r][c]) {
+                if (this.grid[r][c] !== previousGrid[r][c]) {
                     moved = true;
                     break;
                 }
@@ -157,7 +163,6 @@ class Game2048 {
         }
         
         if (moved) {
-            this.grid = transformedGrid;
             this.updateScore();
             this.addRandomTile();
             this.render();
@@ -166,17 +171,47 @@ class Game2048 {
                 this.showOverlay('游戏结束!');
             }
         }
+        
+        setTimeout(() => {
+            this.isProcessing = false;
+        }, 150);
+    }
+    
+    // 处理单行/列的滑动和合并
+    processLine(line) {
+        // Step 1: 移除零
+        let result = line.filter(x => x !== 0);
+        
+        // Step 2: 合并相邻相同数字（每个数字只能合并一次）
+        for (let i = 0; i < result.length - 1; i++) {
+            if (result[i] === result[i + 1] && result[i] !== 0) {
+                result[i] *= 2;
+                this.score += result[i];
+                result[i + 1] = 0;
+                i++; // 跳过下一个，因为它已经被合并了
+            }
+        }
+        
+        // Step 3: 再次移除零
+        result = result.filter(x => x !== 0);
+        
+        // Step 4: 补零
+        while (result.length < line.length) {
+            result.push(0);
+        }
+        
+        return result;
     }
 
     isGameOver() {
-        // Check for empty cells
+        // 检查是否有空格
         for (let r = 0; r < this.size; r++) {
             for (let c = 0; c < this.size; c++) {
                 if (this.grid[r][c] === 0) return false;
             }
         }
         
-        // Check for possible merges
+        // 检查是否可以合并
         for (let r = 0; r < this.size; r++) {
             for (let c = 0; c < this.size; c++) {
                 const current = this.grid[r][c];
@@ -189,7 +224,7 @@ class Game2048 {
     }
 
     bindEvents() {
-        // Keyboard events
+        // 键盘事件
         document.addEventListener('keydown', (e) => {
             switch(e.key) {
                 case 'ArrowUp':
@@ -211,7 +246,7 @@ class Game2048 {
             }
         });
 
-        // Touch events
+        // 触摸事件
         let startX, startY;
         const gameContainer = document.querySelector('.game-container');
         
@@ -248,11 +283,11 @@ class Game2048 {
             }
         });
 
-        // Button events
+        // 按钮事件
         document.getElementById('new-game').addEventListener('click', () => this.init());
         document.getElementById('try-again').addEventListener('click', () => this.init());
     }
 }
 
-// Start game
+// 启动游戏
 new Game2048();
