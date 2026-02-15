@@ -96,22 +96,24 @@ class Game2048 {
         };
         
         const slideRow = (row) => {
-            // Remove zeros
+            // Step 1: Remove zeros
             let newRow = row.filter(x => x !== 0);
             
-            // Merge
+            // Step 2: Merge adjacent equal numbers
             for (let i = 0; i < newRow.length - 1; i++) {
-                if (newRow[i] === newRow[i + 1]) {
+                if (newRow[i] === newRow[i + 1] && newRow[i] !== 0) {
                     newRow[i] *= 2;
                     this.score += newRow[i];
                     newRow[i + 1] = 0;
+                    // Skip the next one since we just merged it
+                    i++;
                 }
             }
             
-            // Remove zeros again
+            // Step 3: Remove zeros again after merge
             newRow = newRow.filter(x => x !== 0);
             
-            // Pad with zeros
+            // Step 4: Pad with zeros
             while (newRow.length < this.size) {
                 newRow.push(0);
             }
