@@ -32,6 +32,12 @@ h1 {
     color: #776e65;
 }
 
+.version {
+    font-size: 16px;
+    color: #bbada0;
+    vertical-align: super;
+}
+
 .scores {
     display: flex;
     gap: 10px;
